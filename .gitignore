@@ -41,5 +41,8 @@ next-env.d.ts
 /outputs/
 /work/
 /_files/
+/public/resources/*.pdf
 /.openai/*.log
 /.openai/*.pid
+/.openai/*.tar.gz
+/.sites-source/
