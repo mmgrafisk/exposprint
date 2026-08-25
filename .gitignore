@@ -42,7 +42,5 @@ next-env.d.ts
 /work/
 /_files/
 /public/resources/*.pdf
-/public/og.png
-/public/assets/products/*.png
 /.openai/*.log
 /.openai/*.pid
