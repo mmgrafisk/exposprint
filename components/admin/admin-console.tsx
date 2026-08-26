@@ -34,6 +34,32 @@ const orderStatuses = [
   "payment_expired",
 ];
 
+function objectValue(value: unknown) {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function addressValue(address: Record<string, unknown>, key: string) {
+  return address[key] == null ? "" : String(address[key]);
+}
+
+function addressFromForm(form: FormData, prefix: string) {
+  return {
+    line1: String(form.get(`${prefix}Line1`) ?? "").trim(),
+    line2: String(form.get(`${prefix}Line2`) ?? "").trim(),
+    postalCode: String(form.get(`${prefix}PostalCode`) ?? "").trim(),
+    city: String(form.get(`${prefix}City`) ?? "").trim(),
+    countryCode: String(form.get(`${prefix}CountryCode`) ?? "").trim().toUpperCase(),
+  };
+}
+
+function hasText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function addressComplete(address: Record<string, unknown>) {
+  return ["line1", "postalCode", "city", "countryCode"].every((key) => hasText(address[key]));
+}
+
 function AdminConsoleInner({
   bootstrap,
   email,
@@ -133,6 +159,7 @@ function AdminConsoleInner({
 
   const tabs = [
     "overview",
+    "company",
     "products",
     "translations",
     "markets",
@@ -142,6 +169,24 @@ function AdminConsoleInner({
   ];
   const launchReady =
     data.settings.find((item) => item.key === "launch_ready")?.value === true;
+  const business = data.business ?? {};
+  const physicalAddress = objectValue(business.physical_address);
+  const returnAddress = objectValue(business.return_address);
+  const businessComplete = ["company_name", "vat_number", "email", "phone"].every((key) => hasText(business[key]))
+    && addressComplete(physicalAddress)
+    && addressComplete(returnAddress)
+    && Boolean(business.approved_at);
+  const requiredLegalCodes = new Set(data.requiredLegal.map((item) => String(item.code)));
+  const approvedLegalCodes = new Set(data.legal
+    .filter((item) => item.locale === "da" && item.status === "published" && item.approved_at)
+    .map((item) => String(item.document_type)));
+  const approvedLegalCount = [...requiredLegalCodes].filter((code) => approvedLegalCodes.has(code)).length;
+  const translationsComplete = coverage
+    .filter((item) => data.locales.some((localeItem) => localeItem.code === item.code && localeItem.enabled))
+    .every((item) => item.complete === item.required);
+  const launchCanEnable = businessComplete
+    && approvedLegalCount === requiredLegalCodes.size
+    && translationsComplete;
   return (
     <main className="admin-page">
       <div className="topline admin-topline">
@@ -164,6 +209,11 @@ function AdminConsoleInner({
             <span>
               {launchReady ? t("admin.published") : t("admin.launchReason")}
             </span>
+            {!launchReady && <ul className="launch-checklist">
+              {!businessComplete && <li>{t("admin.launchBusinessMissing")}</li>}
+              {approvedLegalCount < requiredLegalCodes.size && <li>{t("admin.launchLegalMissing", { complete: approvedLegalCount, required: requiredLegalCodes.size })}</li>}
+              {!translationsComplete && <li>{t("admin.launchTranslationsMissing")}</li>}
+            </ul>}
           </div>
         </div>
         <nav className="admin-tabs" aria-label={String(t("admin.title"))}>
@@ -232,6 +282,68 @@ function AdminConsoleInner({
                   .join(" · ")}
               </p>
             </article>
+          </section>
+        )}
+
+        {tab === "company" && (
+          <section className="admin-panel company-admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <h2>{t("admin.company")}</h2>
+                <p>{t("admin.companyBody")}</p>
+              </div>
+            </div>
+            <form className="company-admin-form" onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              void save("business", "singleton", {
+                companyName: String(form.get("companyName") ?? "").trim(),
+                vatNumber: String(form.get("vatNumber") ?? "").trim(),
+                email: String(form.get("email") ?? "").trim(),
+                phone: String(form.get("phone") ?? "").trim(),
+                physicalAddress: addressFromForm(form, "physical"),
+                returnAddress: addressFromForm(form, "return"),
+                approve: form.get("approve") === "on",
+              });
+            }}>
+              <div className="company-admin-grid">
+                <label><span>{t("admin.companyName")}</span><input name="companyName" defaultValue={String(business.company_name ?? "")} /></label>
+                <label><span>{t("admin.vatNumber")}</span><input name="vatNumber" defaultValue={String(business.vat_number ?? "")} /></label>
+                <label><span>{t("admin.email")}</span><input name="email" type="email" defaultValue={String(business.email ?? "")} /></label>
+                <label><span>{t("admin.phone")}</span><input name="phone" defaultValue={String(business.phone ?? "")} /></label>
+              </div>
+              <div className="company-addresses">
+                <fieldset>
+                  <legend>{t("admin.physicalAddress")}</legend>
+                  <label><span>{t("admin.addressLine1")}</span><input name="physicalLine1" defaultValue={addressValue(physicalAddress, "line1")} /></label>
+                  <label><span>{t("admin.addressLine2")}</span><input name="physicalLine2" defaultValue={addressValue(physicalAddress, "line2")} /></label>
+                  <div className="company-admin-grid">
+                    <label><span>{t("admin.postalCode")}</span><input name="physicalPostalCode" defaultValue={addressValue(physicalAddress, "postalCode")} /></label>
+                    <label><span>{t("admin.city")}</span><input name="physicalCity" defaultValue={addressValue(physicalAddress, "city")} /></label>
+                    <label><span>{t("admin.countryCode")}</span><input name="physicalCountryCode" maxLength={2} defaultValue={addressValue(physicalAddress, "countryCode") || bootstrap.market.countryCode} /></label>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>{t("admin.returnAddress")}</legend>
+                  <label><span>{t("admin.addressLine1")}</span><input name="returnLine1" defaultValue={addressValue(returnAddress, "line1")} /></label>
+                  <label><span>{t("admin.addressLine2")}</span><input name="returnLine2" defaultValue={addressValue(returnAddress, "line2")} /></label>
+                  <div className="company-admin-grid">
+                    <label><span>{t("admin.postalCode")}</span><input name="returnPostalCode" defaultValue={addressValue(returnAddress, "postalCode")} /></label>
+                    <label><span>{t("admin.city")}</span><input name="returnCity" defaultValue={addressValue(returnAddress, "city")} /></label>
+                    <label><span>{t("admin.countryCode")}</span><input name="returnCountryCode" maxLength={2} defaultValue={addressValue(returnAddress, "countryCode") || bootstrap.market.countryCode} /></label>
+                  </div>
+                </fieldset>
+              </div>
+              <label className="company-approval"><input name="approve" type="checkbox" defaultChecked={Boolean(business.approved_at)} />{t("admin.approveCompany")}</label>
+              <button className="button">{t("admin.save")}</button>
+            </form>
+            <form className="admin-launch-control" onSubmit={(event) => {
+              event.preventDefault();
+              void save("launch", "launch_ready", { enabled: !launchReady });
+            }}>
+              <div><strong>{t("admin.launchChecks")}</strong><span>{launchCanEnable ? t("admin.launchChecksPassed") : t("admin.launchChecksBlocked")}</span></div>
+              <button className="button button-primary" disabled={!launchReady && !launchCanEnable}>{launchReady ? t("admin.launchDisable") : t("admin.launchEnable")}</button>
+            </form>
           </section>
         )}
 

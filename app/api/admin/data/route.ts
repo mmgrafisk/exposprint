@@ -54,6 +54,23 @@ const legalCreateValues = z.object({
   body: z.string().min(1).max(200000),
   effectiveAt: z.string().datetime().nullable().optional(),
 });
+const addressValues = z.object({
+  line1: z.string().max(240),
+  line2: z.string().max(240),
+  postalCode: z.string().max(40),
+  city: z.string().max(120),
+  countryCode: z.string().regex(/^$|^[A-Z]{2}$/),
+});
+const businessValues = z.object({
+  companyName: z.string().max(200),
+  vatNumber: z.string().max(80),
+  physicalAddress: addressValues,
+  email: z.union([z.literal(""), z.string().email().max(320)]),
+  phone: z.string().max(80),
+  returnAddress: addressValues,
+  approve: z.boolean(),
+});
+const launchValues = z.object({ enabled: z.boolean() });
 
 const patchSchema = z.discriminatedUnion("resource", [
   z.object({ resource: z.literal("product"), id: z.string().uuid(), values: productValues }),
@@ -67,6 +84,8 @@ const patchSchema = z.discriminatedUnion("resource", [
   z.object({ resource: z.literal("localeStatus"), id: z.string().max(20), values: enabledValues }),
   z.object({ resource: z.literal("currencyStatus"), id: z.string().max(3), values: enabledValues }),
   z.object({ resource: z.literal("legalCreate"), id: z.string().max(80), values: legalCreateValues }),
+  z.object({ resource: z.literal("business"), id: z.literal("singleton"), values: businessValues }),
+  z.object({ resource: z.literal("launch"), id: z.literal("launch_ready"), values: launchValues }),
 ]);
 
 export async function GET() {
@@ -189,6 +208,29 @@ export async function PATCH(request: Request) {
       }).select().single();
       error = result.error; after = result.data;
     }
+  } else if (resource === "business") {
+    const previous = await db.from("business_profile").select("*").eq("id", true).maybeSingle(); before = previous.data;
+    const result = await db.from("business_profile").upsert({
+      id: true,
+      company_name: values.companyName,
+      vat_number: values.vatNumber,
+      physical_address: values.physicalAddress,
+      email: values.email,
+      phone: values.phone,
+      return_address: values.returnAddress,
+      approved_at: values.approve ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "id" }).select().single();
+    error = result.error; after = result.data;
+  } else if (resource === "launch") {
+    const previous = await db.from("shop_settings").select("*").eq("key", id).maybeSingle(); before = previous.data;
+    const result = await db.from("shop_settings").upsert({
+      key: id,
+      value: values.enabled,
+      updated_by: actor.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "key" }).select().single();
+    error = result.error; after = result.data;
   }
 
   if (error) return NextResponse.json({ error: "ADMIN_UPDATE_FAILED" }, { status: 409 });
