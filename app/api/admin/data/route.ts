@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminSupabase } from "@/lib/supabase/admin";
-import { requireAdmin } from "@/lib/supabase/server";
+import { requireAdmin, serverSupabase } from "@/lib/supabase/server";
 
 const productValues = z.object({
   supplierCostMinor: z.number().int().nonnegative().nullable().optional(),
@@ -72,7 +71,7 @@ const patchSchema = z.discriminatedUnion("resource", [
 
 export async function GET() {
   if (!await requireAdmin()) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-  const db = adminSupabase();
+  const db = await serverSupabase();
   if (!db) return NextResponse.json({ error: "ADMIN_DATABASE_NOT_CONFIGURED" }, { status: 503 });
   const results = await Promise.all([
     db.from("products").select("id,sku,status,category_slug,supplier_cost_minor,net_price_minor_dkk,production_days_min,production_days_max,approved_image_path").order("sku"),
@@ -103,7 +102,7 @@ export async function PATCH(request: Request) {
   if (!actor) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "INVALID_ADMIN_UPDATE" }, { status: 400 });
-  const db = adminSupabase();
+  const db = await serverSupabase();
   if (!db) return NextResponse.json({ error: "ADMIN_DATABASE_NOT_CONFIGURED" }, { status: 503 });
   const { resource, id, values } = parsed.data;
   let error: { message: string } | null = null;

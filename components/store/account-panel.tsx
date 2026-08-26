@@ -17,7 +17,7 @@ export function AccountPanel() {
     const supabase = createBrowserClient(url, key);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${location.origin}/${bootstrap.locale.code}/account` },
+      options: { emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(`/${bootstrap.locale.code}/account`)}` },
     });
     setMessage(error ? t("account.error") : t("account.sent"));
   }

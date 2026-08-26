@@ -93,6 +93,7 @@ function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap;
       body: JSON.stringify({ email, password, token }),
     });
     setBusy(false);
+    if (response.status === 202) return setMessage(String(t("admin.setupConfirmEmail")));
     if (!response.ok) return setMessage(String(t("admin.setupError")));
     setPhase("setup_done");
   }
