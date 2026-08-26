@@ -129,9 +129,18 @@ test("admin recovery stays same-origin and closed setup has no signup side effec
   assert.equal(safeNextUrl("/admin/reset-password?from=email#form").href, `${origin}/admin/reset-password?from=email#form`);
 });
 
-test("premium product and document assets are present", async () => {
+test("premium product assets and external Drive documents are present", async () => {
   const mockups = (await readdir(new URL("public/assets/mockups/", root))).filter((file) => file.endsWith(".webp"));
   const pdfs = (await readdir(new URL("public/resources/", root))).filter((file) => file.endsWith(".pdf"));
+  const drive = JSON.parse(await readFile(new URL("data/google-drive-resources.json", root), "utf8"));
+  const driveIds = Object.values(drive.files);
+  const resourceIndexes = (await readdir(new URL("public/resources/", root))).filter((file) => /^index-[^.]+\.html$/.test(file));
+  const linkedPdfs = (await Promise.all(resourceIndexes.map((file) => readFile(new URL(`public/resources/${file}`, root), "utf8"))))
+    .flatMap((html) => html.match(/https:\/\/drive\.usercontent\.google\.com\/download\?id=/g) ?? []);
   assert.equal(mockups.length, 35);
-  assert.equal(pdfs.length, 45);
+  assert.equal(pdfs.length, 0);
+  assert.equal(Object.keys(drive.files).length, 45);
+  assert.equal(new Set(driveIds).size, 45);
+  assert.equal(linkedPdfs.length, 45);
+  assert.match(drive.folderUrl, /^https:\/\/drive\.google\.com\/drive\/folders\//);
 });

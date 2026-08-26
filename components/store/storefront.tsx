@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, FileUp, PackageCheck, ShieldCheck } from "lucide-react";
 import { customerUnitPrice, deliveryEstimate, formatMoney } from "@/lib/store/pricing";
+import { localizedDrivePdfUrl } from "@/lib/store/resources";
 import { useStore } from "./store-context";
 
 export function Storefront() {
@@ -46,6 +47,6 @@ export function Storefront() {
       {!shown.length && <p className="empty-state">{t("catalog.empty")}</p>}
     </div></section>
     <section className="section process" id="process"><div className="shell process-grid"><div className="process-intro"><span className="eyebrow">{t("process.eyebrow")}</span><h2>{t("process.title")}</h2><p>{t("process.body")}</p></div><div className="process-steps"><article><b>01</b><div><strong>{t("process.step1Title")}</strong><span>{t("process.step1Body")}</span></div></article><article><b>02</b><div><strong>{t("process.step2Title")}</strong><span>{t("process.step2Body")}</span></div></article><article><b>03</b><div><strong>{t("process.step3Title")}</strong><span>{t("process.step3Body")}</span></div></article></div></div></section>
-    <section className="section resources" id="resources"><div className="shell"><div className="section-head"><div><span className="eyebrow">{t("resources.eyebrow")}</span><h2>{t("resources.title")}</h2></div></div><div className="resource-grid"><article><span>01</span><h3>{t("resources.catalogueTitle")}</h3><p>{t("resources.catalogueBody")}</p><a className="button" href={`/resources/catalogue-${bootstrap.locale.code}.pdf`}>{t("resources.open")}<ArrowRight size={17} /></a></article><article><span>02</span><h3>{t("resources.technicalTitle")}</h3><p>{t("resources.technicalBody")}</p><a className="button" href={`/resources/index-${bootstrap.locale.code}.html`}>{t("resources.open")}<ArrowRight size={17} /></a></article></div></div></section>
+    <section className="section resources" id="resources"><div className="shell"><div className="section-head"><div><span className="eyebrow">{t("resources.eyebrow")}</span><h2>{t("resources.title")}</h2></div></div><div className="resource-grid"><article><span>01</span><h3>{t("resources.catalogueTitle")}</h3><p>{t("resources.catalogueBody")}</p><a className="button" href={localizedDrivePdfUrl("catalogue", bootstrap.locale.code)}>{t("resources.open")}<ArrowRight size={17} /></a></article><article><span>02</span><h3>{t("resources.technicalTitle")}</h3><p>{t("resources.technicalBody")}</p><a className="button" href={`/resources/index-${bootstrap.locale.code}.html`}>{t("resources.open")}<ArrowRight size={17} /></a></article></div></div></section>
   </main>;
 }
