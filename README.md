@@ -1,14 +1,26 @@
-# Exposprint Europe
+# ExposPrint webshop
 
-A multilingual storefront concept for European exhibition equipment. The interface includes a responsive product catalogue, persistent-feeling cart interactions, Danish/English/German content, account login and an administration dashboard.
+Premium Vinext-webshop for personaliseret messeudstyr. Storefronten bruger mørk grafit, kobber og creme sammen med de godkendte ExposPrint-produktbilleder.
 
-## Local development
+## Det er implementeret
 
-```bash
-npm install
-npm run dev
-```
+- Datadrevne sprog, valutaer, markeder, moms, oversættelser og juridiske dokumenter i Supabase.
+- 132 kilderækker konsolideret til 122 unikke produkter. 23 er publiceret; resten afventer pris, billede, konfiguration eller godkendt leveringstid.
+- DKK som prisgrundlag, 40 % bruttoavance (`leverandørpris / 0,60`), markedets moms og administrerbar valutaafrunding.
+- Gratis fragt som synlig prislinje samt levering beregnet af produktionstid og zonetransport i arbejdsdage.
+- Serverbaseret quote og Stripe Checkout. Beløb fra browseren ignoreres.
+- Gæstekøb, valgfri passwordless konto, idempotente Stripe-webhooks og komplette ordresnapshots.
+- Private, resumérbare TUS-artworkuploads med signerede tokens, filvalidering og serverbaseret rate limiting.
+- Juridisk CMS-model med versioner, accepteret version på ordren og lanceringslås.
+- Adminroller fra Supabase `app_metadata`; ingen e-mailbaseret administratorliste.
 
-Use `admin@exposprint.eu` / `demo123` to preview the administration area.
+## Lokal kørsel
 
-> The checkout button is a front-end integration point. Connect a PCI-compliant payment provider (such as Stripe) and an authenticated backend before processing real orders. Supplier fulfilment should likewise be connected through Adivin's approved partner integration rather than exposing supplier credentials in the browser.
+1. Kopiér `.env.example` til `.env.local` og brug testnøgler.
+2. Kør `pnpm install`.
+3. Kør `pnpm dev`.
+4. Kør `pnpm lint`, `pnpm build` og `node --test tests/exposprint.test.mjs` før aflevering.
+
+Databasen bygges af migrationerne i `supabase/migrations`. Startdata kan lægges ind med `pnpm db:seed`, når `SUPABASE_SECRET_KEY` er sat lokalt. Stripe- og Supabase-hemmeligheder må kun ligge på serveren.
+
+Lancering er bevidst blokeret, indtil virksomhedens navn, CVR/VAT, fysiske adresse, e-mail, telefon, returadresse og de danske juridiske dokumenter er udfyldt og godkendt.
