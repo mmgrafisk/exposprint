@@ -8,20 +8,26 @@ import { useTranslation } from "react-i18next";
 import { StoreI18nProvider } from "@/components/store/i18n-provider";
 import type { StoreBootstrap } from "@/lib/store/types";
 
-type Phase = "login" | "enroll" | "verify" | "setup" | "setup_done";
+type Phase = "login" | "enroll" | "verify" | "recover" | "recover_sent" | "reset" | "reset_done";
 
-function browserSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  return url && key ? createBrowserClient(url, key) : null;
+type SupabasePublicConfig = {
+  url: string;
+  publishableKey: string;
+} | null;
+
+function browserSupabase(config: SupabasePublicConfig) {
+  return config ? createBrowserClient(config.url, config.publishableKey) : null;
 }
 
-function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap; initialPhase: "login" | "mfa" | "setup" }) {
+function AdminAuthForm({ bootstrap, initialPhase, authConfig }: {
+  bootstrap: StoreBootstrap;
+  initialPhase: "login" | "mfa" | "recover" | "reset";
+  authConfig: SupabasePublicConfig;
+}) {
   const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>(initialPhase === "mfa" ? "verify" : initialPhase);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
   const [code, setCode] = useState("");
   const [factorId, setFactorId] = useState("");
   const [qr, setQr] = useState("");
@@ -29,7 +35,7 @@ function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap;
   const [busy, setBusy] = useState(false);
 
   async function prepareMfa() {
-    const supabase = browserSupabase();
+    const supabase = browserSupabase(authConfig);
     if (!supabase) return setMessage(String(t("admin.loginError")));
     const { data: factors, error } = await supabase.auth.mfa.listFactors();
     if (error) return setMessage(String(t("admin.mfaError")));
@@ -60,7 +66,7 @@ function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap;
   async function signIn(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true); setMessage("");
-    const supabase = browserSupabase();
+    const supabase = browserSupabase(authConfig);
     if (!supabase) { setBusy(false); return setMessage(String(t("admin.loginError"))); }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || data.user?.app_metadata?.role !== "admin") {
@@ -75,7 +81,7 @@ function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap;
   async function verifyMfa(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true); setMessage("");
-    const supabase = browserSupabase();
+    const supabase = browserSupabase(authConfig);
     if (!supabase || !factorId) { setBusy(false); return setMessage(String(t("admin.mfaError"))); }
     const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
     if (challengeError) { setBusy(false); return setMessage(String(t("admin.mfaError"))); }
@@ -84,18 +90,28 @@ function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap;
     location.href = "/admin";
   }
 
-  async function setup(event: React.FormEvent) {
+  async function requestPasswordReset(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true); setMessage("");
-    const response = await fetch("/api/admin/setup", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password, token }),
-    });
+    const supabase = browserSupabase(authConfig);
+    if (!supabase) { setBusy(false); return setMessage(String(t("admin.loginError"))); }
+    const redirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent("/admin/reset-password")}`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     setBusy(false);
-    if (response.status === 202) return setMessage(String(t("admin.setupConfirmEmail")));
-    if (!response.ok) return setMessage(String(t("admin.setupError")));
-    setPhase("setup_done");
+    if (error) return setMessage(String(t("admin.recoveryError")));
+    setPhase("recover_sent");
+  }
+
+  async function updatePassword(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true); setMessage("");
+    const supabase = browserSupabase(authConfig);
+    if (!supabase) { setBusy(false); return setMessage(String(t("admin.recoveryError"))); }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) { setBusy(false); return setMessage(String(t("admin.recoveryError"))); }
+    await supabase.auth.signOut();
+    setBusy(false);
+    setPhase("reset_done");
   }
 
   return <main className="admin-auth-page"><section className="admin-auth-card">
@@ -109,7 +125,7 @@ function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap;
         <input id="admin-password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
         <button className="button button-primary button-full" disabled={busy}>{t("admin.loginSubmit")}</button>
       </form>
-      <Link className="text-button" href="/admin/setup">{t("admin.setupLink")}</Link>
+      <Link className="text-button" href="/admin/recover">{t("admin.forgotPassword")}</Link>
     </>}
     {(phase === "enroll" || phase === "verify") && <>
       <h1>{t("admin.mfaTitle")}</h1><p>{t("admin.mfaBody")}</p>
@@ -120,22 +136,35 @@ function AdminAuthForm({ bootstrap, initialPhase }: { bootstrap: StoreBootstrap;
         <button className="button button-primary button-full" disabled={busy}>{t("admin.mfaVerify")}</button>
       </form>
     </>}
-    {phase === "setup" && <>
-      <h1>{t("admin.setupTitle")}</h1><p>{t("admin.setupBody")}</p>
-      <form onSubmit={setup}>
-        <label htmlFor="setup-email">{t("account.email")}</label><input id="setup-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-        <label htmlFor="setup-password">{t("admin.password")}</label><input id="setup-password" type="password" autoComplete="new-password" minLength={12} required value={password} onChange={(event) => setPassword(event.target.value)} />
-        <label htmlFor="setup-token">{t("admin.setupToken")}</label><input id="setup-token" type="password" autoComplete="off" required value={token} onChange={(event) => setToken(event.target.value)} />
-        <button className="button button-primary button-full" disabled={busy}>{t("admin.setupSubmit")}</button>
+    {phase === "recover" && <>
+      <h1>{t("admin.recoveryTitle")}</h1><p>{t("admin.recoveryBody")}</p>
+      <form onSubmit={requestPasswordReset}>
+        <label htmlFor="recovery-email">{t("account.email")}</label>
+        <input id="recovery-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+        <button className="button button-primary button-full" disabled={busy}>{t("admin.recoverySubmit")}</button>
+      </form>
+      <Link className="text-button" href="/admin/login">{t("admin.backToLogin")}</Link>
+    </>}
+    {phase === "recover_sent" && <><h1>{t("admin.recoverySentTitle")}</h1><p>{t("admin.recoverySent")}</p><Link className="button button-primary button-full" href="/admin/login">{t("admin.backToLogin")}</Link></>}
+    {phase === "reset" && <>
+      <h1>{t("admin.resetTitle")}</h1><p>{t("admin.resetBody")}</p>
+      <form onSubmit={updatePassword}>
+        <label htmlFor="reset-password">{t("admin.newPassword")}</label>
+        <input id="reset-password" type="password" autoComplete="new-password" minLength={12} required value={password} onChange={(event) => setPassword(event.target.value)} />
+        <button className="button button-primary button-full" disabled={busy}>{t("admin.resetSubmit")}</button>
       </form>
     </>}
-    {phase === "setup_done" && <><h1>{t("admin.setupSuccess")}</h1><Link className="button button-primary button-full" href="/admin/login">{t("admin.loginSubmit")}</Link></>}
+    {phase === "reset_done" && <><h1>{t("admin.resetSuccessTitle")}</h1><p>{t("admin.resetSuccess")}</p><Link className="button button-primary button-full" href="/admin/login">{t("admin.loginSubmit")}</Link></>}
     {message && <p className="error-message" role="alert">{message}</p>}
   </section></main>;
 }
 
-export function AdminAuth({ bootstrap, phase }: { bootstrap: StoreBootstrap; phase: "login" | "mfa" | "setup" }) {
+export function AdminAuth({ bootstrap, phase, authConfig }: {
+  bootstrap: StoreBootstrap;
+  phase: "login" | "mfa" | "recover" | "reset";
+  authConfig: SupabasePublicConfig;
+}) {
   return <StoreI18nProvider locale={bootstrap.locale.code} translations={bootstrap.translations}>
-    <AdminAuthForm bootstrap={bootstrap} initialPhase={phase} />
+    <AdminAuthForm bootstrap={bootstrap} initialPhase={phase} authConfig={authConfig} />
   </StoreI18nProvider>;
 }

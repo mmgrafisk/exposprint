@@ -3,7 +3,7 @@ import { AdminAuth } from "@/components/admin/admin-auth";
 import { AdminConsole } from "@/components/admin/admin-console";
 import { getStoreBootstrap } from "@/lib/store/data";
 import { getVisitorCountry } from "@/lib/store/request";
-import { getAdminAccessState } from "@/lib/supabase/server";
+import { getAdminAccessState, getSupabasePublicConfig } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,12 @@ export default async function AdminPage() {
     getStoreBootstrap({ visitorCountry }),
   ]);
   if (access.state === "signed_out" || access.state === "forbidden" || access.state === "unavailable") redirect("/admin/login");
-  if (access.state === "needs_mfa") return <AdminAuth bootstrap={bootstrap} phase="mfa" />;
-  return <AdminConsole bootstrap={bootstrap} email={access.user.email ?? ""} />;
+  if (access.state === "needs_mfa") {
+    return <AdminAuth bootstrap={bootstrap} phase="mfa" authConfig={getSupabasePublicConfig()} />;
+  }
+  return <AdminConsole
+    bootstrap={bootstrap}
+    email={access.user.email ?? ""}
+    authConfig={getSupabasePublicConfig()}
+  />;
 }

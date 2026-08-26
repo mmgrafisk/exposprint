@@ -91,6 +91,44 @@ test("artwork authorization uses direct resumable storage with strict validation
   assert.match(await read("lib/server/rate-limit.ts"), /consume_service_rate_limit/);
 });
 
+test("admin auth receives public Supabase runtime config from the server", async () => {
+  const [page, auth, consoleSource] = await Promise.all([
+    read("app/admin/page.tsx"),
+    read("components/admin/admin-auth.tsx"),
+    read("components/admin/admin-console.tsx"),
+  ]);
+  assert.ok(page.includes("authConfig={getSupabasePublicConfig()}"));
+  assert.doesNotMatch(auth, /process\.env\.NEXT_PUBLIC_SUPABASE/);
+  assert.doesNotMatch(consoleSource, /process\.env\.NEXT_PUBLIC_SUPABASE/);
+});
+
+test("admin recovery stays same-origin and closed setup has no signup side effect", async () => {
+  const [callback, setupPage, setupApi] = await Promise.all([
+    read("app/auth/callback/route.ts"),
+    read("app/admin/setup/page.tsx"),
+    read("app/api/admin/setup/route.ts"),
+  ]);
+  assert.ok(callback.includes('value.includes("\\\\")'));
+  assert.match(callback, /resolved\.origin === origin/);
+  assert.match(setupPage, /redirect\("\/admin\/login"\)/);
+  assert.match(setupApi, /SETUP_CLOSED/);
+  assert.match(setupApi, /status: 410/);
+  assert.doesNotMatch(setupApi, /signUp|claim_admin_owner/);
+
+  const origin = "https://shop.example";
+  const safeNextUrl = (value) => {
+    const fallback = new URL("/", origin);
+    if (!value?.startsWith("/") || value.startsWith("//") || value.includes("\\")) return fallback;
+    const resolved = new URL(value, origin);
+    return resolved.origin === origin ? resolved : fallback;
+  };
+  assert.equal(safeNextUrl("/\\\\attacker.example/path").href, `${origin}/`);
+  assert.equal(safeNextUrl("/\t/attacker.example/path").href, `${origin}/`);
+  assert.equal(safeNextUrl("/\n/attacker.example/path").href, `${origin}/`);
+  assert.equal(safeNextUrl("/\r/attacker.example/path").href, `${origin}/`);
+  assert.equal(safeNextUrl("/admin/reset-password?from=email#form").href, `${origin}/admin/reset-password?from=email#form`);
+});
+
 test("premium product and document assets are present", async () => {
   const mockups = (await readdir(new URL("public/assets/mockups/", root))).filter((file) => file.endsWith(".webp"));
   const pdfs = (await readdir(new URL("public/resources/", root))).filter((file) => file.endsWith(".pdf"));

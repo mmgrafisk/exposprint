@@ -63,9 +63,11 @@ function addressComplete(address: Record<string, unknown>) {
 function AdminConsoleInner({
   bootstrap,
   email,
+  authConfig,
 }: {
   bootstrap: StoreBootstrap;
   email: string;
+  authConfig: { url: string; publishableKey: string } | null;
 }) {
   const { t } = useTranslation();
   const [data, setData] = useState<AdminData | null>(null);
@@ -101,10 +103,9 @@ function AdminConsoleInner({
   }
 
   async function signOut() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    if (url && key)
-      await createBrowserClient(url, key).auth.signOut({ scope: "global" });
+    if (authConfig) {
+      await createBrowserClient(authConfig.url, authConfig.publishableKey).auth.signOut({ scope: "global" });
+    }
     location.href = "/admin/login";
   }
 
@@ -925,16 +926,18 @@ function AdminConsoleInner({
 export function AdminConsole({
   bootstrap,
   email,
+  authConfig,
 }: {
   bootstrap: StoreBootstrap;
   email: string;
+  authConfig: { url: string; publishableKey: string } | null;
 }) {
   return (
     <StoreI18nProvider
       locale={bootstrap.locale.code}
       translations={bootstrap.translations}
     >
-      <AdminConsoleInner bootstrap={bootstrap} email={email} />
+      <AdminConsoleInner bootstrap={bootstrap} email={email} authConfig={authConfig} />
     </StoreI18nProvider>
   );
 }
