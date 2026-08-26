@@ -10,6 +10,7 @@ import type {
 const clampMargin = (margin: number) => Math.min(95, Math.max(0, margin));
 
 export function netSalePriceDkkMinor(product: StoreProduct, grossMarginPercent: number) {
+  if (product.netPriceMinorDkk != null) return product.netPriceMinorDkk;
   if (product.priceOverrideMinor != null) return product.priceOverrideMinor;
   if (product.supplierCostMinor == null) return 0;
   const divisor = 1 - clampMargin(grossMarginPercent) / 100;
@@ -29,9 +30,13 @@ export function customerUnitPrice(
   currency: CurrencyDefinition,
   grossMarginPercent: number,
 ): { gross: Money; taxMinor: number } {
-  if (product.customerPriceMinor != null) {
-    const taxMinor = Math.round(product.customerPriceMinor * (market.vatRate / (100 + market.vatRate)));
-    return { gross: { amountMinor: product.customerPriceMinor, currency: currency.code }, taxMinor };
+  if (product.netPriceMinorDkk == null && product.customerPriceMinor != null) {
+    const grossMinor = product.customerPriceMinor;
+    const netMinor = Math.round(grossMinor / (1 + market.vatRate / 100));
+    return {
+      gross: { amountMinor: grossMinor, currency: currency.code },
+      taxMinor: Math.max(0, grossMinor - netMinor),
+    };
   }
   const netDkkMinor = netSalePriceDkkMinor(product, grossMarginPercent);
   const grossDkkMinor = Math.round(netDkkMinor * (1 + market.vatRate / 100));

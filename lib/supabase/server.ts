@@ -25,7 +25,25 @@ export async function requireAdmin() {
   if (!supabase) return null;
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const role = user.app_metadata?.role;
-  const roles = Array.isArray(user.app_metadata?.roles) ? user.app_metadata.roles : [];
-  return role === "admin" || roles.includes("admin") ? user : null;
+  if (user.app_metadata?.role !== "admin") return null;
+  const [{ data: owner }, { data: assurance }] = await Promise.all([
+    supabase.from("admin_owner").select("user_id").eq("user_id", user.id).maybeSingle(),
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+  ]);
+  return owner && assurance?.currentLevel === "aal2" ? user : null;
+}
+
+export async function getAdminAccessState() {
+  const supabase = await serverSupabase();
+  if (!supabase) return { state: "unavailable" as const, user: null };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { state: "signed_out" as const, user: null };
+  if (user.app_metadata?.role !== "admin") return { state: "forbidden" as const, user };
+  const [{ data: owner }, { data: assurance }] = await Promise.all([
+    supabase.from("admin_owner").select("user_id").eq("user_id", user.id).maybeSingle(),
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+  ]);
+  if (!owner) return { state: "forbidden" as const, user };
+  if (assurance?.currentLevel !== "aal2") return { state: "needs_mfa" as const, user };
+  return { state: "ready" as const, user };
 }

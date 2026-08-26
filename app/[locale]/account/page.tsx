@@ -1,13 +1,12 @@
-import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { AccountPanel } from "@/components/store/account-panel";
 import { SiteShell } from "@/components/store/site-shell";
 import { getPublicStoreBootstrap } from "@/lib/store/data";
+import { getVisitorCountry } from "@/lib/store/request";
 
 export default async function AccountPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const cookieStore = await cookies();
-  const bootstrap = await getPublicStoreBootstrap(locale, cookieStore.get("ep_currency")?.value, cookieStore.get("ep_market")?.value);
-  if (bootstrap.locale.code !== locale) notFound();
+  const bootstrap = await getPublicStoreBootstrap({ routeLocale: locale, visitorCountry: await getVisitorCountry() });
+  if (bootstrap.locale.code !== locale) redirect(`/${bootstrap.locale.code}/account`);
   return <SiteShell bootstrap={bootstrap}><AccountPanel /></SiteShell>;
 }

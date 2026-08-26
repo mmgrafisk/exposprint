@@ -5,6 +5,8 @@ import { getStoreBootstrap } from "@/lib/store/data";
 import { buildQuote } from "@/lib/store/quote";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
+import { visitorCountryFromRequest } from "@/lib/store/request";
+import { serverSupabase } from "@/lib/supabase/server";
 
 const lineSchema = z.object({
   productId: z.string().min(1).max(100),
@@ -15,9 +17,7 @@ const lineSchema = z.object({
 }).refine((line) => Boolean(line.artworkPath) === Boolean(line.artworkSession), { message: "Artwork path and session must be supplied together" });
 
 const checkoutSchema = z.object({
-  locale: z.string().min(2).max(20),
-  currency: z.string().min(3).max(3),
-  market: z.string().length(2),
+  destinationCountry: z.string().length(2).transform((value) => value.toUpperCase()),
   items: z.array(lineSchema).min(1).max(50),
 });
 
@@ -31,12 +31,13 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "INVALID_CART" }, { status: 400 });
 
   const requested = parsed.data;
-  const bootstrap = await getStoreBootstrap(requested.locale, requested.currency, requested.market);
-  if (
-    bootstrap.locale.code !== requested.locale ||
-    bootstrap.currency.code !== requested.currency.toUpperCase() ||
-    bootstrap.market.countryCode !== requested.market.toUpperCase()
-  ) return NextResponse.json({ error: "MARKET_SELECTION_UNAVAILABLE" }, { status: 400 });
+  const bootstrap = await getStoreBootstrap({
+    visitorCountry: visitorCountryFromRequest(request),
+    destinationCountry: requested.destinationCountry,
+  });
+  if (!bootstrap.markets.some((market) => market.countryCode === requested.destinationCountry && market.enabled)) {
+    return NextResponse.json({ error: "DESTINATION_UNAVAILABLE" }, { status: 400 });
+  }
   if (!bootstrap.settings.launchReady) return NextResponse.json({ error: "LAUNCH_LOCKED" }, { status: 503 });
 
   const { data: requiredLegal, error: requiredLegalError } = await db.from("required_legal_document_types").select("code").eq("required_at_checkout", true);
@@ -74,10 +75,15 @@ export async function POST(request: Request) {
 
   let orderId: string | undefined;
   {
+    const sessionClient = await serverSupabase();
+    const { data: { user } } = sessionClient ? await sessionClient.auth.getUser() : { data: { user: null } };
     const { data: order, error } = await db.from("orders").insert({
+      user_id: user?.id ?? null,
       status: "pending_payment",
       locale: quote.locale,
       market_code: quote.market,
+      visitor_country: quote.visitorCountry,
+      destination_country: quote.destinationCountry,
       currency: quote.currency,
       subtotal_minor: quote.subtotal.amountMinor,
       shipping_minor: quote.shipping.amount.amountMinor,
@@ -113,7 +119,7 @@ export async function POST(request: Request) {
 
   const stripe = new Stripe(key);
   const origin = new URL(request.url).origin;
-  const allowedCountries = bootstrap.markets.map((item) => item.countryCode) as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[];
+  const allowedCountries = [requested.destinationCountry] as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[];
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     currency: quote.currency.toLowerCase(),
@@ -132,7 +138,7 @@ export async function POST(request: Request) {
     })),
     shipping_options: [{
       shipping_rate_data: {
-        display_name: bootstrap.translations["cart.free"] ?? "Free",
+        display_name: bootstrap.translations["shipping.standard"] ?? bootstrap.translations["cart.shipping"] ?? "",
         type: "fixed_amount",
         fixed_amount: { amount: quote.shipping.amount.amountMinor, currency: quote.currency.toLowerCase() },
         delivery_estimate: {
@@ -147,6 +153,8 @@ export async function POST(request: Request) {
       order_id: orderId,
       locale: quote.locale,
       market: quote.market,
+      visitor_country: quote.visitorCountry,
+      destination_country: quote.destinationCountry,
       legal_versions: JSON.stringify(quote.legalVersions),
     },
   });

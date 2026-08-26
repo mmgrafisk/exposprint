@@ -9,19 +9,22 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "vinext build && node --test tests/exposprint.test.mjs",
+    "test": "vinext build && node scripts/check-i18n.mjs && node --test tests/exposprint.test.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern work --ignore-pattern outputs --ignore-pattern public",
-    "db:generate": "drizzle-kit generate"
-    ,"db:seed": "node scripts/seed-supabase.mjs"
+    "db:generate": "drizzle-kit generate",
+    "db:seed": "node scripts/seed-supabase.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.7.0",
     "@supabase/supabase-js": "2.57.4",
     "drizzle-orm": "0.45.2",
+    "i18next": "26.4.0",
     "lucide-react": "0.544.0",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "react-i18next": "17.0.12",
     "stripe": "18.5.0",
     "tus-js-client": "4.3.1",
     "xlsx": "0.18.5",

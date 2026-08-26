@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { SiteShell } from "@/components/store/site-shell";
 import { getPublicStoreBootstrap } from "@/lib/store/data";
+import { getVisitorCountry } from "@/lib/store/request";
+import { createTranslator } from "@/lib/i18n/config";
 
 export default async function SuccessPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const cookieStore = await cookies();
-  const bootstrap = await getPublicStoreBootstrap(locale, cookieStore.get("ep_currency")?.value, cookieStore.get("ep_market")?.value);
-  if (bootstrap.locale.code !== locale) notFound();
-  const t = (key: string) => bootstrap.translations[key] ?? key;
+  const bootstrap = await getPublicStoreBootstrap({ routeLocale: locale, visitorCountry: await getVisitorCountry() });
+  if (bootstrap.locale.code !== locale) redirect(`/${bootstrap.locale.code}/checkout/success`);
+  const t = await createTranslator(bootstrap.locale.code, bootstrap.translations);
   return <SiteShell bootstrap={bootstrap}><main className="success-page"><section>
     <CheckCircle2 aria-hidden />
     <span className="eyebrow">{t("checkout.successEyebrow")}</span>

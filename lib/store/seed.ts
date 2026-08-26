@@ -10,7 +10,9 @@ import type {
   StoreProduct,
   StoreSettings,
   TranslationBundle,
+  StoreContextInput,
 } from "./types";
+import { resolveStoreContext } from "./market";
 
 type SeedShape = {
   settings: StoreSettings;
@@ -33,13 +35,12 @@ const products = (catalogue as unknown as StoreProduct[]).map((product) => ({
   })).filter((option) => option.values.length > 0 || option.type === "text" || option.type === "number"),
 }));
 
-export function getSeedBootstrap(localeCode?: string, currencyCode?: string, marketCode?: string): StoreBootstrap {
+export function getSeedBootstrap(input: StoreContextInput = {}): StoreBootstrap {
   const locales = source.locales.filter((item) => item.enabled).sort((a, b) => a.sortOrder - b.sortOrder);
-  const locale = locales.find((item) => item.code === localeCode) ?? locales.find((item) => item.code === source.settings.defaultLocale) ?? locales[0];
   const currencies = source.currencies.filter((item) => item.enabled);
-  const currency = currencies.find((item) => item.code === currencyCode?.toUpperCase()) ?? currencies.find((item) => item.code === source.settings.defaultCurrency) ?? currencies[0];
   const markets = source.markets.filter((item) => item.enabled);
-  const market = markets.find((item) => item.countryCode === marketCode?.toUpperCase()) ?? markets.find((item) => item.countryCode === source.settings.defaultMarket) ?? markets[0];
+  const resolved = resolveStoreContext(input, source.settings, locales, currencies, markets);
+  const { locale, currency, market } = resolved;
   const primary = source.translations[locale.code] ?? {};
   const fallback = source.translations[source.settings.fallbackLocale] ?? {};
   return {
@@ -57,5 +58,7 @@ export function getSeedBootstrap(localeCode?: string, currencyCode?: string, mar
     products,
     catalogueCount: products.length,
     source: "seed",
+    visitorCountry: resolved.visitorCountry,
+    destinationCountry: resolved.destinationCountry,
   };
 }

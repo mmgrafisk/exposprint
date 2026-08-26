@@ -16,23 +16,16 @@ export function Storefront() {
   const zone = bootstrap.shippingZones.find((item) => item.code === bootstrap.market.shippingZone) ?? bootstrap.shippingZones[0];
   const heroProduct = published.find((product) => product.approvedImage?.endsWith("23.webp")) ?? published[0];
   const countryNames = useMemo(() => new Intl.DisplayNames([bootstrap.locale.intlLocale], { type: "region" }), [bootstrap.locale.intlLocale]);
-  const setMarket = (value: string) => {
-    document.cookie = `ep_market=${encodeURIComponent(value)};path=/;max-age=31536000;samesite=lax`;
-    const selected = bootstrap.markets.find((market) => market.countryCode === value);
-    if (selected && selected.defaultCurrency !== bootstrap.currency.code) {
-      document.cookie = `ep_currency=${encodeURIComponent(selected.defaultCurrency)};path=/;max-age=31536000;samesite=lax`;
-    }
-    location.reload();
-  };
+  const visitorName = countryNames.of(bootstrap.visitorCountry) ?? t("market.unknownCountry");
 
   return <main>
     <section className="hero">
       <div className="shell hero-grid">
         <div className="hero-copy"><span className="eyebrow">{t("hero.eyebrow")}</span><h1>{t("hero.titleA")}<br /><em>{t("hero.titleB")}</em></h1><p>{t("hero.body")}</p><div className="cta-row"><a className="button button-primary" href="#products">{t("hero.shop")}<ArrowRight size={17} /></a><a className="button button-light" href={`mailto:${bootstrap.settings.supportEmail}`}>{t("hero.advice")}</a></div></div>
-        <div className="hero-visual">{heroProduct?.approvedImage && <Image className="hero-product" src={heroProduct.approvedImage} alt={heroProduct.title} width={900} height={1100} priority unoptimized />}<div className="hero-meta"><span>{t("catalog.freeShipping")}</span><strong>{bootstrap.market.countryCode} · {bootstrap.currency.code}</strong></div></div>
+        <div className="hero-visual">{heroProduct?.approvedImage && <Image className="hero-product" src={heroProduct.approvedImage} alt={heroProduct.title} width={900} height={1100} priority unoptimized />}<div className="hero-meta"><span>{t("catalog.freeShipping")}</span><strong>{t("market.summary", { country: visitorName, currency: bootstrap.currency.code })}</strong></div></div>
       </div>
     </section>
-    <section className="market-bar"><div className="shell market-bar-inner"><div><span>{t("market.label")}</span><strong>{countryNames.of(bootstrap.market.countryCode)}</strong></div><label className="market-select"><span className="sr-only">{t("market.label")}</span><select value={bootstrap.market.countryCode} onChange={(event) => setMarket(event.target.value)}>{bootstrap.markets.map((market) => <option key={market.countryCode} value={market.countryCode}>{countryNames.of(market.countryCode)}</option>)}</select></label></div></section>
+    <section className="market-bar"><div className="shell market-bar-inner"><div><span>{t("market.detected")}</span><strong>{t("market.summary", { country: visitorName, currency: bootstrap.currency.code })}</strong></div><span className="market-auto">{t("market.automatic")}</span></div></section>
     <section className="trust-band"><div className="shell trust-grid">
       <article><PackageCheck /><div><strong>{t("trust.shippingTitle")}</strong><span>{t("trust.shippingBody")}</span></div></article>
       <article><CheckCircle2 /><div><strong>{t("trust.proofTitle")}</strong><span>{t("trust.proofBody")}</span></div></article>

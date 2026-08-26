@@ -19,11 +19,11 @@ export function AccountPanel() {
       email,
       options: { emailRedirectTo: `${location.origin}/${bootstrap.locale.code}/account` },
     });
-    setMessage(error ? error.message : t("account.sent"));
+    setMessage(error ? t("account.error") : t("account.sent"));
   }
 
   return <main className="account-page"><section className="account-card">
-    <span className="eyebrow">ExposPrint</span>
+    <span className="eyebrow">{bootstrap.settings.brandName}</span>
     <h1>{t("account.title")}</h1>
     <p>{t("account.body")}</p>
     <form onSubmit={login}>

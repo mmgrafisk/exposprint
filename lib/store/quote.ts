@@ -6,8 +6,8 @@ export function buildQuote(bootstrap: StoreBootstrap, inputs: QuoteLineInput[]):
   if (!zone) throw new Error("SHIPPING_ZONE_UNAVAILABLE");
   const lines = inputs.map((input) => {
     const product = bootstrap.products.find((item) => item.id === input.productId && item.status === "published");
-    const hasCustomerPrice = product?.customerPriceMinor != null;
-    if (!product || (!hasCustomerPrice && product.supplierCostMinor == null) || product.productionDaysMin == null) {
+    const hasServerPrice = product?.netPriceMinorDkk != null || product?.supplierCostMinor != null || product?.customerPriceMinor != null;
+    if (!product || !hasServerPrice || product.productionDaysMin == null) {
       throw new Error("PRODUCT_UNAVAILABLE");
     }
     const quantity = Math.max(1, Math.min(100, Math.trunc(input.quantity)));
@@ -36,7 +36,12 @@ export function buildQuote(bootstrap: StoreBootstrap, inputs: QuoteLineInput[]):
     .filter((item, index, rows) => rows.findIndex((candidate) => candidate.documentType === item.documentType) === index)
     .map((item) => [item.documentType, item.version]));
   return {
-    locale: bootstrap.locale.code, market: bootstrap.market.countryCode, currency: bootstrap.currency.code, lines,
+    locale: bootstrap.locale.code,
+    visitorCountry: bootstrap.visitorCountry,
+    destinationCountry: bootstrap.destinationCountry ?? bootstrap.market.countryCode,
+    market: bootstrap.market.countryCode,
+    currency: bootstrap.currency.code,
+    lines,
     subtotal: { amountMinor: subtotalMinor, currency: bootstrap.currency.code },
     shipping: {
       zoneCode: zone.code, amount: { amountMinor: shippingMinor, currency: bootstrap.currency.code }, isFree: shippingMinor === 0,

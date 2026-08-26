@@ -9,6 +9,9 @@ export type StoreSettings = {
   grossMarginPercent: number;
   supportEmail: string;
   launchReady: boolean;
+  geoFallbackLocale: LocaleCode;
+  geoFallbackCurrency: CurrencyCode;
+  brandName: string;
 };
 
 export type LocaleDefinition = {
@@ -58,6 +61,7 @@ export type ProductOption = {
   type: "single" | "multiple" | "number" | "text";
   required: boolean;
   values: string[];
+  valueLabels?: Record<string, string>;
 };
 
 export type StoreProduct = {
@@ -72,6 +76,7 @@ export type StoreProduct = {
   supplierCostMinor: number | null;
   baseCurrency: CurrencyCode;
   priceOverrideMinor?: number | null;
+  netPriceMinorDkk?: number | null;
   customerPriceMinor?: number;
   productionDaysMin: number | null;
   productionDaysMax: number | null;
@@ -113,6 +118,8 @@ export type StoreBootstrap = {
   products: StoreProduct[];
   catalogueCount: number;
   source: "supabase" | "seed";
+  visitorCountry: string;
+  destinationCountry: string | null;
 };
 
 export type Money = { amountMinor: number; currency: CurrencyCode };
@@ -153,6 +160,8 @@ export type QuoteLine = {
 
 export type StoreQuote = {
   locale: LocaleCode;
+  visitorCountry: string;
+  destinationCountry: string;
   market: string;
   currency: CurrencyCode;
   lines: QuoteLine[];
@@ -161,4 +170,19 @@ export type StoreQuote = {
   taxMinor: number;
   total: Money;
   legalVersions: Record<string, number>;
+};
+
+export type StoreContextInput = {
+  visitorCountry?: string | null;
+  destinationCountry?: string | null;
+  routeLocale?: LocaleCode | null;
+  includeDrafts?: boolean;
+};
+
+export type ResolvedStoreContext = {
+  visitorCountry: string;
+  destinationCountry: string | null;
+  locale: LocaleDefinition;
+  currency: CurrencyDefinition;
+  market: Market;
 };

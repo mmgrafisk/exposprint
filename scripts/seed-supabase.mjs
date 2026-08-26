@@ -25,7 +25,7 @@ fail("shipping rates", result.error);
 result = await db.from("markets").upsert(seed.markets.map((item) => ({ country_code: item.countryCode, default_locale: item.defaultLocale, default_currency: item.defaultCurrency, vat_rate: item.vatRate, vat_zone: "EU", shipping_zone_code: item.shippingZone, enabled: item.enabled })), { onConflict: "country_code" });
 fail("markets", result.error);
 
-const settings = { default_locale: seed.settings.defaultLocale, fallback_locale: seed.settings.fallbackLocale, default_market: seed.settings.defaultMarket, default_currency: seed.settings.defaultCurrency, gross_margin_percent: seed.settings.grossMarginPercent, support_email: seed.settings.supportEmail, launch_ready: false };
+const settings = { default_locale: seed.settings.defaultLocale, fallback_locale: seed.settings.fallbackLocale, default_market: seed.settings.defaultMarket, default_currency: seed.settings.defaultCurrency, gross_margin_percent: seed.settings.grossMarginPercent, support_email: seed.settings.supportEmail, launch_ready: false, geo_fallback_locale: seed.settings.geoFallbackLocale, geo_fallback_currency: seed.settings.geoFallbackCurrency, brand_name: seed.settings.brandName };
 result = await db.from("shop_settings").upsert(Object.entries(settings).map(([settingKey, value]) => ({ key: settingKey, value })), { onConflict: "key" });
 fail("settings", result.error);
 
@@ -46,6 +46,20 @@ result = await db.from("legal_documents").upsert(seed.legalDocuments.map((item) 
 fail("legal documents", result.error);
 result = await db.from("locales").upsert(seed.locales.map((item) => ({ code: item.code, name: item.name, hreflang: item.hreflang, intl_locale: item.intlLocale, enabled: item.enabled, is_default: item.isDefault, sort_order: item.sortOrder })), { onConflict: "code" });
 fail("activate locales", result.error);
+
+const categoryRows = [...new Map(catalogue.map((item) => [item.categorySlug, { slug: item.categorySlug, status: "published", sort_order: 100 }])).values()];
+result = await db.from("categories").upsert(categoryRows, { onConflict: "slug" }).select("id,slug");
+fail("categories", result.error);
+const categoryIds = new Map(result.data.map((item) => [item.slug, item.id]));
+const categoryTranslations = catalogue.flatMap((item) => seed.locales.map((locale) => ({
+  category_id: categoryIds.get(item.categorySlug),
+  locale: locale.code,
+  name: item.category,
+  description: "",
+})));
+const uniqueCategoryTranslations = [...new Map(categoryTranslations.map((item) => [`${item.category_id}:${item.locale}`, item])).values()];
+result = await db.from("category_translations").upsert(uniqueCategoryTranslations, { onConflict: "category_id,locale" });
+fail("category translations", result.error);
 
 const productRows = catalogue.map((item) => ({ sku: item.sku, supplier_sku: item.supplierSku || null, category_slug: item.categorySlug, status: "draft", supplier_cost_minor: item.supplierCostMinor, base_currency: item.baseCurrency, price_override_minor: item.priceOverrideMinor ?? null, production_days_min: item.productionDaysMin, production_days_max: item.productionDaysMax, approved_image_path: item.approvedImage, gallery: Array.isArray(item.gallery) ? item.gallery : item.approvedImage ? [item.approvedImage] : [], personalized: item.personalized, source_url: item.sourceUrl ?? null }));
 for (let index = 0; index < productRows.length; index += 100) {
@@ -68,6 +82,36 @@ for (let index = 0; index < options.length; index += 500) {
   result = await db.from("product_options").insert(options.slice(index, index + 500));
   fail("product options", result.error);
 }
+result = await db.from("product_options").select("id,product_id,code");
+fail("product option ids", result.error);
+const optionIds = new Map(result.data.map((item) => [`${item.product_id}:${item.code}`, item.id]));
+const optionTranslations = catalogue.flatMap((item) => item.options.flatMap((option) => seed.locales.map((locale) => ({
+  option_id: optionIds.get(`${ids.get(item.sku)}:${option.code}`),
+  locale: locale.code,
+  label: option.label,
+  values: option.values,
+}))));
+for (let index = 0; index < optionTranslations.length; index += 500) {
+  result = await db.from("product_option_translations").upsert(optionTranslations.slice(index, index + 500), { onConflict: "option_id,locale" });
+  fail("product option translations", result.error);
+}
+
+result = await db.from("shipping_method_translations").upsert(seed.locales.map((locale) => ({
+  method_id: methodId,
+  locale: locale.code,
+  name: seed.translations[locale.code]["shipping.standard"],
+  description: seed.translations[locale.code]["shipping.standardDescription"],
+})), { onConflict: "method_id,locale" });
+fail("shipping method translations", result.error);
+
+const orderStatuses = ["pending_payment","payment_processing","paid","artwork_review","production","shipped","completed","cancelled","payment_expired"];
+result = await db.from("order_status_translations").upsert(orderStatuses.flatMap((status) => seed.locales.map((locale) => ({
+  status,
+  locale: locale.code,
+  label: seed.translations[locale.code][`orderStatus.${status}`],
+  description: "",
+}))), { onConflict: "status,locale" });
+fail("order status translations", result.error);
 for (const item of catalogue) {
   if (item.status === "published") {
     result = await db.from("products").update({ status: "published" }).eq("sku", item.sku);

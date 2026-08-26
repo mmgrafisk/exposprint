@@ -6,7 +6,7 @@ import { useStore } from "./store-context";
 type Consent = { necessary: true; analytics: boolean; marketing: boolean; updatedAt: string };
 
 export function CookieConsent() {
-  const { t } = useStore();
+  const { bootstrap, t } = useStore();
   const [open, setOpen] = useState(false);
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
@@ -17,7 +17,7 @@ export function CookieConsent() {
   if (!open) return null;
   const save = (value: Consent) => { localStorage.setItem("exposprint_consent_v1", JSON.stringify(value)); setOpen(false); };
   return <section className="consent" role="dialog" aria-modal="true" aria-labelledby="consent-title">
-    <span className="eyebrow">ExposPrint</span><h2 id="consent-title">{t("cookies.title")}</h2><p>{t("cookies.body")}</p>
+    <span className="eyebrow">{bootstrap.settings.brandName}</span><h2 id="consent-title">{t("cookies.title")}</h2><p>{t("cookies.body")}</p>
     <div className="consent-options">
       <label><input type="checkbox" checked disabled />{t("cookies.necessary")}</label>
       <label><input type="checkbox" checked={analytics} onChange={(event) => setAnalytics(event.target.checked)} />{t("cookies.analytics")}</label>
