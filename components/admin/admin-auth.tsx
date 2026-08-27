@@ -56,12 +56,25 @@ function AdminAuthForm({ bootstrap, initialPhase, authConfig }: {
   }
 
   useEffect(() => {
-    if (initialPhase !== "mfa") return;
-    const handle = window.setTimeout(() => void prepareMfa(), 0);
+    if (initialPhase !== "mfa" && initialPhase !== "reset") return;
+    const handle = window.setTimeout(() => {
+      if (initialPhase === "mfa") void prepareMfa();
+      else void preparePasswordResetMfa();
+    }, 0);
     return () => window.clearTimeout(handle);
   // The initial phase is immutable for the lifetime of this screen.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function preparePasswordResetMfa() {
+    const supabase = browserSupabase(authConfig);
+    if (!supabase) return setMessage(String(t("admin.recoveryError")));
+    const { data: factors, error } = await supabase.auth.mfa.listFactors();
+    if (error) return setMessage(String(t("admin.mfaError")));
+    const verified = factors.totp.find((factor) => factor.status === "verified");
+    if (!verified) return setMessage(String(t("admin.mfaError")));
+    setFactorId(verified.id);
+  }
 
   async function signIn(event: React.FormEvent) {
     event.preventDefault();
@@ -107,6 +120,11 @@ function AdminAuthForm({ bootstrap, initialPhase, authConfig }: {
     setBusy(true); setMessage("");
     const supabase = browserSupabase(authConfig);
     if (!supabase) { setBusy(false); return setMessage(String(t("admin.recoveryError"))); }
+    if (!factorId || code.length !== 6) { setBusy(false); return setMessage(String(t("admin.mfaError"))); }
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
+    if (challengeError) { setBusy(false); return setMessage(String(t("admin.mfaError"))); }
+    const { error: verifyError } = await supabase.auth.mfa.verify({ factorId, challengeId: challenge.id, code });
+    if (verifyError) { setBusy(false); return setMessage(String(t("admin.mfaError"))); }
     const { error } = await supabase.auth.updateUser({ password });
     if (error) { setBusy(false); return setMessage(String(t("admin.recoveryError"))); }
     await supabase.auth.signOut();
@@ -151,7 +169,9 @@ function AdminAuthForm({ bootstrap, initialPhase, authConfig }: {
       <form onSubmit={updatePassword}>
         <label htmlFor="reset-password">{t("admin.newPassword")}</label>
         <input id="reset-password" type="password" autoComplete="new-password" minLength={12} required value={password} onChange={(event) => setPassword(event.target.value)} />
-        <button className="button button-primary button-full" disabled={busy}>{t("admin.resetSubmit")}</button>
+        <label htmlFor="reset-mfa">{t("admin.mfaCode")}</label>
+        <input id="reset-mfa" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} />
+        <button className="button button-primary button-full" disabled={busy || !factorId}>{t("admin.resetSubmit")}</button>
       </form>
     </>}
     {phase === "reset_done" && <><h1>{t("admin.resetSuccessTitle")}</h1><p>{t("admin.resetSuccess")}</p><Link className="button button-primary button-full" href="/admin/login">{t("admin.loginSubmit")}</Link></>}
