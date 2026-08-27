@@ -115,6 +115,22 @@ test("admin product costs use a guarded database function", async () => {
   assert.match(sql, /grant execute on function public\.admin_product_rows\(uuid\) to authenticated/);
 });
 
+test("admin uses a responsive sidebar and complete database i18n", async () => {
+  const [consoleSource, styles, sql] = await Promise.all([
+    read("components/admin/admin-console.tsx"),
+    read("app/globals.css"),
+    read("supabase/migrations/20260827050000_complete_admin_i18n.sql"),
+  ]);
+  assert.match(consoleSource, /className="admin-sidebar"/);
+  assert.match(consoleSource, /className="admin-nav"/);
+  assert.doesNotMatch(consoleSource, /className="admin-tabs"/);
+  assert.match(styles, /grid-template-columns:268px minmax\(0,1fr\)/);
+  assert.match(styles, /@media\(max-width:980px\).*\.admin-workspace\{grid-template-columns:1fr\}/);
+  assert.match(sql, /\('da','admin','overview','Oversigt','published'\)/);
+  assert.match(sql, /\('de','admin','translations','Übersetzungen','published'\)/);
+  assert.match(sql, /\('en','admin','saveError','Changes could not be saved\.','published'\)/);
+});
+
 test("admin recovery stays same-origin and closed setup has no signup side effect", async () => {
   const [callback, setupPage, setupApi] = await Promise.all([
     read("app/auth/callback/route.ts"),

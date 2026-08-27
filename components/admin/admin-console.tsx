@@ -190,13 +190,33 @@ function AdminConsoleInner({
     && translationsComplete;
   return (
     <main className="admin-page">
-      <div className="topline admin-topline">
-        <span>{email}</span>
-        <button className="text-button" onClick={signOut}>
-          {t("admin.signOut")}
-        </button>
-      </div>
-      <div className="shell admin-shell">
+      <div className="admin-workspace">
+        <aside className="admin-sidebar">
+          <div className="admin-sidebar-brand">
+            <span className="wordmark light">{bootstrap.settings.brandName}</span>
+            <span>{t("admin.title")}</span>
+          </div>
+          <nav className="admin-nav" aria-label={String(t("admin.title"))}>
+            {tabs.map((item) => (
+              <button
+                key={item}
+                className={tab === item ? "active" : ""}
+                onClick={() => setTab(item)}
+              >
+                <span aria-hidden="true" />
+                {t(`admin.${item}`)}
+              </button>
+            ))}
+          </nav>
+          <div className="admin-sidebar-footer">
+            <span>{email}</span>
+            <button className="text-button" onClick={signOut}>
+              {t("admin.signOut")}
+            </button>
+          </div>
+        </aside>
+        <div className="admin-main">
+          <div className="admin-shell">
         <div className="admin-heading">
           <div>
             <span className="eyebrow">{bootstrap.settings.brandName}</span>
@@ -217,17 +237,6 @@ function AdminConsoleInner({
             </ul>}
           </div>
         </div>
-        <nav className="admin-tabs" aria-label={String(t("admin.title"))}>
-          {tabs.map((item) => (
-            <button
-              key={item}
-              className={tab === item ? "active" : ""}
-              onClick={() => setTab(item)}
-            >
-              {t(`admin.${item}`)}
-            </button>
-          ))}
-        </nav>
         {message && (
           <p className="admin-message" role="status">
             {message}
@@ -918,6 +927,8 @@ function AdminConsoleInner({
             )}
           </section>
         )}
+          </div>
+        </div>
       </div>
     </main>
   );
