@@ -135,6 +135,25 @@ test("admin uses a responsive sidebar and complete database i18n", async () => {
   assert.match(utf8Repair, /convert_from\(convert_to\(value, 'WIN1252'\), 'UTF8'\)/);
 });
 
+test("admin feedback, neutral title and every product editor are database driven", async () => {
+  const [consoleSource, route, styles, sql] = await Promise.all([
+    read("components/admin/admin-console.tsx"),
+    read("app/api/admin/data/route.ts"),
+    read("app/globals.css"),
+    read("supabase/migrations/20260827060000_admin_product_editor_ux.sql"),
+  ]);
+  assert.match(consoleSource, /className={`admin-toast \$\{messageKind\}`}/);
+  assert.match(consoleSource, /window\.setTimeout\(\(\) => setMessage\(""\), 2800\)/);
+  assert.match(consoleSource, /filteredProducts\.flatMap/);
+  assert.match(consoleSource, /save\("productEditor", productId/);
+  assert.match(route, /from\("product_translations"\)\.upsert/);
+  assert.match(styles, /\.admin-control-title\{[^}]*letter-spacing:\.045em/);
+  assert.match(styles, /\.admin-product-editor-grid\{display:grid;grid-template-columns:repeat\(4/);
+  assert.match(sql, /\('da','admin','title','Kontrolcenter','published'\)/);
+  assert.doesNotMatch(sql, /ExposPrint kontrolcenter/);
+  assert.match(sql, /grant update \([\s\S]*category_slug,[\s\S]*approved_image_path/);
+});
+
 test("admin recovery stays same-origin and closed setup has no signup side effect", async () => {
   const [callback, setupPage, setupApi] = await Promise.all([
     read("app/auth/callback/route.ts"),

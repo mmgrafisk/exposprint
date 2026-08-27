@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { useTranslation } from "react-i18next";
+import { AlertCircle, CheckCircle2, Pencil, Search, X } from "lucide-react";
 import { StoreI18nProvider } from "@/components/store/i18n-provider";
 import type { StoreBootstrap } from "@/lib/store/types";
 
 type AdminData = {
   products: Array<Record<string, unknown>>;
+  productTranslations: Array<Record<string, unknown>>;
   translations: Array<Record<string, unknown>>;
   requiredTranslations: Array<Record<string, unknown>>;
   locales: Array<Record<string, unknown>>;
@@ -74,10 +76,18 @@ function AdminConsoleInner({
   const [tab, setTab] = useState("overview");
   const [locale, setLocale] = useState(bootstrap.locale.code);
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">("success");
+  const [productSearch, setProductSearch] = useState("");
+  const [productStatus, setProductStatus] = useState("all");
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [productLocale, setProductLocale] = useState(bootstrap.locale.code);
 
   async function load() {
     const response = await fetch("/api/admin/data", { cache: "no-store" });
-    if (!response.ok) return setMessage(String(t("admin.saveError")));
+    if (!response.ok) {
+      setMessageKind("error");
+      return setMessage(String(t("admin.saveError")));
+    }
     setData((await response.json()) as AdminData);
   }
 
@@ -85,6 +95,12 @@ function AdminConsoleInner({
     const handle = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(handle);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!message || messageKind !== "success") return;
+    const handle = window.setTimeout(() => setMessage(""), 2800);
+    return () => window.clearTimeout(handle);
+  }, [message, messageKind]);
 
   async function save(
     resource: string,
@@ -97,9 +113,15 @@ function AdminConsoleInner({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ resource, id, values }),
     });
-    if (!response.ok) return setMessage(String(t("admin.saveError")));
+    if (!response.ok) {
+      setMessageKind("error");
+      setMessage(String(t("admin.saveError")));
+      return false;
+    }
+    setMessageKind("success");
     setMessage(String(t("admin.saved")));
     await load();
+    return true;
   }
 
   async function signOut() {
@@ -147,6 +169,26 @@ function AdminConsoleInner({
     }
     return [...byKey.values()].sort((a, b) => `${a.namespace}.${a.key}`.localeCompare(`${b.namespace}.${b.key}`));
   }, [data, locale]);
+
+  const productTranslationMap = useMemo(() => new Map(
+    (data?.productTranslations ?? []).map((entry) => [
+      `${entry.product_id}:${entry.locale}`,
+      entry,
+    ]),
+  ), [data]);
+
+  const filteredProducts = useMemo(() => {
+    if (!data) return [];
+    const query = productSearch.trim().toLocaleLowerCase(bootstrap.locale.intlLocale);
+    return data.products.filter((product) => {
+      if (productStatus !== "all" && product.status !== productStatus) return false;
+      if (!query) return true;
+      const translation = productTranslationMap.get(`${product.id}:${bootstrap.locale.code}`)
+        ?? productTranslationMap.get(`${product.id}:${bootstrap.settings.fallbackLocale}`);
+      return [product.sku, product.category_slug, translation?.name]
+        .some((value) => String(value ?? "").toLocaleLowerCase(bootstrap.locale.intlLocale).includes(query));
+    });
+  }, [bootstrap.locale.code, bootstrap.locale.intlLocale, bootstrap.settings.fallbackLocale, data, productSearch, productStatus, productTranslationMap]);
 
   if (!data)
     return (
@@ -201,7 +243,11 @@ function AdminConsoleInner({
               <button
                 key={item}
                 className={tab === item ? "active" : ""}
-                onClick={() => setTab(item)}
+                onClick={() => {
+                  setTab(item);
+                  setMessage("");
+                  setEditingProductId(null);
+                }}
               >
                 <span aria-hidden="true" />
                 {t(`admin.${item}`)}
@@ -219,8 +265,7 @@ function AdminConsoleInner({
           <div className="admin-shell">
         <div className="admin-heading">
           <div>
-            <span className="eyebrow">{bootstrap.settings.brandName}</span>
-            <h1>{t("admin.title")}</h1>
+            <h1 className="admin-control-title">{t("admin.title")}</h1>
             <p>{t("admin.subtitle")}</p>
           </div>
           <div className={`launch-status ${launchReady ? "ready" : "blocked"}`}>
@@ -238,9 +283,24 @@ function AdminConsoleInner({
           </div>
         </div>
         {message && (
-          <p className="admin-message" role="status">
-            {message}
-          </p>
+          <div
+            className={`admin-toast ${messageKind}`}
+            role={messageKind === "error" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            {messageKind === "success"
+              ? <CheckCircle2 aria-hidden="true" />
+              : <AlertCircle aria-hidden="true" />}
+            <span>{message}</span>
+            <button
+              className="admin-toast-dismiss"
+              type="button"
+              onClick={() => setMessage("")}
+              aria-label={String(t("admin.dismiss"))}
+            >
+              <X aria-hidden="true" />
+            </button>
+          </div>
         )}
 
         {tab === "overview" && (
@@ -359,105 +419,106 @@ function AdminConsoleInner({
 
         {tab === "products" && (
           <section className="admin-panel">
-            <h2>{t("admin.products")}</h2>
+            <div className="admin-panel-head admin-product-head">
+              <div>
+                <h2>{t("admin.products")}</h2>
+                <p>{t("admin.resultCount", { shown: filteredProducts.length, total: data.products.length })}</p>
+              </div>
+              <div className="admin-product-toolbar">
+                <label className="admin-search">
+                  <Search aria-hidden="true" />
+                  <span className="sr-only">{t("admin.searchProducts")}</span>
+                  <input type="search" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder={String(t("admin.searchProducts"))} />
+                </label>
+                <label>
+                  <span className="sr-only">{t("admin.status")}</span>
+                  <select value={productStatus} onChange={(event) => setProductStatus(event.target.value)}>
+                    <option value="all">{t("admin.allStatuses")}</option>
+                    {productStatuses.map((status) => <option key={status} value={status}>{t(`admin.${status}`)}</option>)}
+                  </select>
+                </label>
+              </div>
+            </div>
             <div className="admin-table-wrap">
-              <table>
+              <table className="admin-product-table">
                 <thead>
                   <tr>
-                  <th>{t("admin.sku")}</th>
+                    <th>{t("admin.sku")}</th>
+                    <th>{t("admin.name")}</th>
                     <th>{t("admin.status")}</th>
                     <th>{t("admin.price")}</th>
                     <th>{t("admin.production")}</th>
-                    <th>
-                      <span className="sr-only">{t("admin.save")}</span>
-                    </th>
+                    <th><span className="sr-only">{t("admin.edit")}</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.products.map((product) => (
-                    <tr key={String(product.id)}>
-                      <td>{String(product.sku)}</td>
-                      <td>
-                        <select
-                          form={`product-${product.id}`}
-                          name="status"
-                          defaultValue={String(product.status)}
-                        >
-                          {productStatuses.map((status) => (
-                            <option key={status} value={status}>
-                              {t(`admin.${status}`)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          form={`product-${product.id}`}
-                          name="supplierCost"
-                          type="number"
-                          min="0"
-                          step="1"
-                          defaultValue={
-                            product.supplier_cost_minor == null
-                              ? ""
-                              : Number(product.supplier_cost_minor)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <div className="inline-fields">
-                          <input
-                            form={`product-${product.id}`}
-                            name="productionMin"
-                            type="number"
-                            min="0"
-                            defaultValue={
-                              product.production_days_min == null
-                                ? ""
-                                : Number(product.production_days_min)
-                            }
-                          />
-                          <input
-                            form={`product-${product.id}`}
-                            name="productionMax"
-                            type="number"
-                            min="0"
-                            defaultValue={
-                              product.production_days_max == null
-                                ? ""
-                                : Number(product.production_days_max)
-                            }
-                          />
-                        </div>
-                      </td>
-                      <td>
-                        <form
-                          id={`product-${product.id}`}
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            const form = new FormData(event.currentTarget);
-                            void save("product", String(product.id), {
-                              status: form.get("status"),
-                              supplierCostMinor:
-                                form.get("supplierCost") === ""
-                                  ? null
-                                  : Number(form.get("supplierCost")),
-                              productionDaysMin:
-                                form.get("productionMin") === ""
-                                  ? null
-                                  : Number(form.get("productionMin")),
-                              productionDaysMax:
-                                form.get("productionMax") === ""
-                                  ? null
-                                  : Number(form.get("productionMax")),
-                            });
-                          }}
-                        >
-                          <button className="button">{t("admin.save")}</button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredProducts.flatMap((product) => {
+                    const productId = String(product.id);
+                    const activeTranslation = productTranslationMap.get(`${productId}:${productLocale}`) ?? {};
+                    const displayTranslation = productTranslationMap.get(`${productId}:${bootstrap.locale.code}`)
+                      ?? productTranslationMap.get(`${productId}:${bootstrap.settings.fallbackLocale}`)
+                      ?? activeTranslation;
+                    const isEditing = editingProductId === productId;
+                    const rows = [
+                      <tr key={productId}>
+                        <td>{String(product.sku)}</td>
+                        <td className="admin-product-name">{String(displayTranslation.name ?? product.sku)}</td>
+                        <td>{t(`admin.${String(product.status)}`)}</td>
+                        <td>{product.supplier_cost_minor == null ? "—" : String(product.supplier_cost_minor)}</td>
+                        <td>{product.production_days_min == null ? "—" : `${product.production_days_min}–${product.production_days_max ?? product.production_days_min}`}</td>
+                        <td><button className="button admin-edit-button" type="button" onClick={() => setEditingProductId(isEditing ? null : productId)}><Pencil aria-hidden="true" />{t("admin.edit")}</button></td>
+                      </tr>,
+                    ];
+                    if (isEditing) rows.push(
+                      <tr className="admin-product-editor-row" key={`${productId}-editor`}>
+                        <td colSpan={6}>
+                          <form
+                            className="admin-product-editor"
+                            key={`${productId}:${productLocale}`}
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              const form = new FormData(event.currentTarget);
+                              void save("productEditor", productId, {
+                                status: form.get("status"),
+                                categorySlug: String(form.get("categorySlug") ?? "").trim(),
+                                supplierCostMinor: form.get("supplierCost") === "" ? null : Number(form.get("supplierCost")),
+                                productionDaysMin: form.get("productionMin") === "" ? null : Number(form.get("productionMin")),
+                                productionDaysMax: form.get("productionMax") === "" ? null : Number(form.get("productionMax")),
+                                approvedImagePath: String(form.get("approvedImagePath") ?? "").trim() || null,
+                                locale: productLocale,
+                                name: String(form.get("name") ?? "").trim(),
+                                slug: String(form.get("slug") ?? "").trim(),
+                                description: String(form.get("description") ?? ""),
+                                altText: String(form.get("altText") ?? ""),
+                                seoTitle: String(form.get("seoTitle") ?? ""),
+                                seoDescription: String(form.get("seoDescription") ?? ""),
+                              }).then((saved) => { if (saved) setEditingProductId(null); });
+                            }}
+                          >
+                            <div className="admin-product-editor-head">
+                              <strong>{t("admin.productDetails")}</strong>
+                              <label><span>{t("admin.locale")}</span><select value={productLocale} onChange={(event) => setProductLocale(event.target.value)}>{data.locales.map((item) => <option key={String(item.code)} value={String(item.code)}>{String(item.name)}</option>)}</select></label>
+                            </div>
+                            <div className="admin-product-editor-grid">
+                              <label><span>{t("admin.status")}</span><select name="status" defaultValue={String(product.status)}>{productStatuses.map((status) => <option key={status} value={status}>{t(`admin.${status}`)}</option>)}</select></label>
+                              <label><span>{t("admin.category")}</span><input name="categorySlug" required defaultValue={String(product.category_slug ?? "")} /></label>
+                              <label><span>{t("admin.price")}</span><input name="supplierCost" type="number" min="0" step="1" defaultValue={product.supplier_cost_minor == null ? "" : Number(product.supplier_cost_minor)} /></label>
+                              <label><span>{t("admin.production")}</span><div className="inline-fields"><input name="productionMin" type="number" min="0" defaultValue={product.production_days_min == null ? "" : Number(product.production_days_min)} /><input name="productionMax" type="number" min="0" defaultValue={product.production_days_max == null ? "" : Number(product.production_days_max)} /></div></label>
+                              <label className="wide"><span>{t("admin.imagePath")}</span><input name="approvedImagePath" defaultValue={String(product.approved_image_path ?? "")} /></label>
+                              <label><span>{t("admin.name")}</span><input name="name" required defaultValue={String(activeTranslation.name ?? "")} /></label>
+                              <label><span>{t("admin.slug")}</span><input name="slug" required defaultValue={String(activeTranslation.slug ?? "")} /></label>
+                              <label className="wide"><span>{t("admin.description")}</span><textarea name="description" defaultValue={String(activeTranslation.description ?? "")} /></label>
+                              <label className="wide"><span>{t("admin.altText")}</span><input name="altText" defaultValue={String(activeTranslation.alt_text ?? "")} /></label>
+                              <label><span>{t("admin.seoTitle")}</span><input name="seoTitle" defaultValue={String(activeTranslation.seo_title ?? "")} /></label>
+                              <label><span>{t("admin.seoDescription")}</span><textarea name="seoDescription" defaultValue={String(activeTranslation.seo_description ?? "")} /></label>
+                            </div>
+                            <div className="admin-product-editor-actions"><button className="button" type="button" onClick={() => setEditingProductId(null)}>{t("admin.cancel")}</button><button className="button button-primary">{t("admin.save")}</button></div>
+                          </form>
+                        </td>
+                      </tr>,
+                    );
+                    return rows;
+                  })}
                 </tbody>
               </table>
             </div>

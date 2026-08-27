@@ -8,6 +8,17 @@ const productValues = z.object({
   productionDaysMax: z.number().int().nonnegative().nullable().optional(),
   status: z.enum(["draft", "hidden", "published", "archived"]).optional(),
 });
+const productEditorValues = productValues.extend({
+  categorySlug: z.string().min(1).max(160),
+  approvedImagePath: z.string().max(1000).nullable(),
+  locale: z.string().min(2).max(20),
+  name: z.string().min(1).max(300),
+  slug: z.string().min(1).max(300),
+  description: z.string().max(20000),
+  altText: z.string().max(500),
+  seoTitle: z.string().max(300),
+  seoDescription: z.string().max(1000),
+});
 const translationValues = z.object({ value: z.string().max(20000) });
 const marketValues = z.object({
   defaultLocale: z.string().min(2).max(20).optional(),
@@ -74,6 +85,7 @@ const launchValues = z.object({ enabled: z.boolean() });
 
 const patchSchema = z.discriminatedUnion("resource", [
   z.object({ resource: z.literal("product"), id: z.string().uuid(), values: productValues }),
+  z.object({ resource: z.literal("productEditor"), id: z.string().uuid(), values: productEditorValues }),
   z.object({ resource: z.literal("translation"), id: z.string().min(5).max(500), values: translationValues }),
   z.object({ resource: z.literal("market"), id: z.string().length(2), values: marketValues }),
   z.object({ resource: z.literal("shipping"), id: z.string().min(1).max(80), values: shippingValues }),
@@ -94,6 +106,7 @@ export async function GET() {
   if (!db) return NextResponse.json({ error: "ADMIN_DATABASE_NOT_CONFIGURED" }, { status: 503 });
   const results = await Promise.all([
     db.rpc("admin_product_rows"),
+    db.from("product_translations").select("product_id,locale,name,slug,description,alt_text,seo_title,seo_description").order("locale").order("name"),
     db.from("translation_entries").select("locale,namespace,key,value,status,updated_at").order("locale").order("namespace").order("key"),
     db.from("required_translation_keys").select("namespace,key,area"),
     db.from("locales").select("*").order("sort_order"),
@@ -108,9 +121,9 @@ export async function GET() {
   ]);
   const error = results.map((result) => result.error).find(Boolean);
   if (error) return NextResponse.json({ error: "ADMIN_DATA_UNAVAILABLE" }, { status: 503 });
-  const [products, translations, requiredTranslations, locales, currencies, markets, shipping, legal, orders, business, settings, requiredLegal] = results;
+  const [products, productTranslations, translations, requiredTranslations, locales, currencies, markets, shipping, legal, orders, business, settings, requiredLegal] = results;
   return NextResponse.json({
-    products: products.data ?? [], translations: translations.data ?? [], requiredTranslations: requiredTranslations.data ?? [],
+    products: products.data ?? [], productTranslations: productTranslations.data ?? [], translations: translations.data ?? [], requiredTranslations: requiredTranslations.data ?? [],
     locales: locales.data ?? [], currencies: currencies.data ?? [], markets: markets.data ?? [], shipping: shipping.data ?? [],
     legal: legal.data ?? [], orders: orders.data ?? [], business: business.data ?? null, settings: settings.data ?? [], requiredLegal: requiredLegal.data ?? [],
   }, { headers: { "cache-control": "private, no-store" } });
@@ -128,16 +141,33 @@ export async function PATCH(request: Request) {
   let before: unknown = null;
   let after: unknown = null;
 
-  if (resource === "product") {
+  if (resource === "product" || resource === "productEditor") {
     const previous = await db.rpc("admin_product_rows", { target_product_id: id }).maybeSingle(); before = previous.data;
     const update = {
       ...(values.supplierCostMinor !== undefined ? { supplier_cost_minor: values.supplierCostMinor } : {}),
       ...(values.productionDaysMin !== undefined ? { production_days_min: values.productionDaysMin } : {}),
       ...(values.productionDaysMax !== undefined ? { production_days_max: values.productionDaysMax } : {}),
       ...(values.status !== undefined ? { status: values.status } : {}),
+      ...(resource === "productEditor" ? {
+        category_slug: values.categorySlug,
+        approved_image_path: values.approvedImagePath,
+      } : {}),
       updated_at: new Date().toISOString(),
     };
     const result = await db.from("products").update(update).eq("id", id); error = result.error;
+    if (!error && resource === "productEditor") {
+      const translation = await db.from("product_translations").upsert({
+        product_id: id,
+        locale: values.locale,
+        name: values.name,
+        slug: values.slug,
+        description: values.description,
+        alt_text: values.altText,
+        seo_title: values.seoTitle,
+        seo_description: values.seoDescription,
+      }, { onConflict: "product_id,locale" });
+      error = translation.error;
+    }
     if (!error) {
       const current = await db.rpc("admin_product_rows", { target_product_id: id }).maybeSingle();
       error = current.error;
