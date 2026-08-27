@@ -116,19 +116,23 @@ test("admin product costs use a guarded database function", async () => {
 });
 
 test("admin uses a responsive sidebar and complete database i18n", async () => {
-  const [consoleSource, styles, sql] = await Promise.all([
+  const [consoleSource, styles, sql, utf8Repair] = await Promise.all([
     read("components/admin/admin-console.tsx"),
     read("app/globals.css"),
     read("supabase/migrations/20260827050000_complete_admin_i18n.sql"),
+    read("supabase/migrations/20260827053000_repair_admin_utf8.sql"),
   ]);
   assert.match(consoleSource, /className="admin-sidebar"/);
   assert.match(consoleSource, /className="admin-nav"/);
   assert.doesNotMatch(consoleSource, /className="admin-tabs"/);
-  assert.match(styles, /grid-template-columns:268px minmax\(0,1fr\)/);
+  assert.match(styles, /grid-template-columns:248px minmax\(0,1fr\)/);
   assert.match(styles, /@media\(max-width:980px\).*\.admin-workspace\{grid-template-columns:1fr\}/);
+  assert.match(styles, /\.admin-translation-list\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.admin-card-list\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(sql, /\('da','admin','overview','Oversigt','published'\)/);
   assert.match(sql, /\('de','admin','translations','Übersetzungen','published'\)/);
   assert.match(sql, /\('en','admin','saveError','Changes could not be saved\.','published'\)/);
+  assert.match(utf8Repair, /convert_from\(convert_to\(value, 'WIN1252'\), 'UTF8'\)/);
 });
 
 test("admin recovery stays same-origin and closed setup has no signup side effect", async () => {
