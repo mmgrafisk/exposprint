@@ -2,6 +2,10 @@
 
 Premium Vinext-webshop for personaliseret messeudstyr. Storefronten bruger mørk grafit, kobber og creme sammen med de godkendte ExposPrint-produktbilleder.
 
+## OpenAI Sites-projekt
+
+Denne mappe er knyttet til Sites-projektet `appgprj_6a8e1b9bcae48191b2c46e268bfd0b5b` via `.openai/hosting.json`. Projektkoblingen følger dermed repositoryet og bliver kopieret med til build-outputtet af Sites-pluginet.
+
 ## Det er implementeret
 
 - Datadrevne sprog, valutaer, markeder, moms, oversættelser og juridiske dokumenter i Supabase.

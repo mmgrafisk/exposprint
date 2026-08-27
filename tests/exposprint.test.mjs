@@ -154,11 +154,13 @@ test("admin feedback, neutral title and every product editor are database driven
   assert.match(sql, /grant update \([\s\S]*category_slug,[\s\S]*approved_image_path/);
 });
 
-test("admin recovery stays same-origin and closed setup has no signup side effect", async () => {
-  const [callback, setupPage, setupApi] = await Promise.all([
+test("admin recovery stays same-origin, requires MFA and keeps utility headings compact", async () => {
+  const [callback, setupPage, setupApi, auth, styles] = await Promise.all([
     read("app/auth/callback/route.ts"),
     read("app/admin/setup/page.tsx"),
     read("app/api/admin/setup/route.ts"),
+    read("components/admin/admin-auth.tsx"),
+    read("app/globals.css"),
   ]);
   assert.ok(callback.includes('value.includes("\\\\")'));
   assert.match(callback, /resolved\.origin === origin/);
@@ -166,6 +168,12 @@ test("admin recovery stays same-origin and closed setup has no signup side effec
   assert.match(setupApi, /SETUP_CLOSED/);
   assert.match(setupApi, /status: 410/);
   assert.doesNotMatch(setupApi, /signUp|claim_admin_owner/);
+  assert.match(auth, /preparePasswordResetMfa/);
+  assert.match(auth, /mfa\.challenge\(\{ factorId \}\)/);
+  assert.match(auth, /mfa\.verify\(\{ factorId, challengeId: challenge\.id, code \}\)/);
+  assert.match(styles, /--utility-heading-max:46px/);
+  assert.match(styles, /\.admin-auth-card h1\{[^}]*font-size:clamp\(32px,4vw,var\(--utility-heading-max\)\)/);
+  assert.match(styles, /\.account-card h1,\.success-page h1,\.admin-lock h1,\.admin-page h1\{[^}]*overflow-wrap:anywhere/);
 
   const origin = "https://shop.example";
   const safeNextUrl = (value) => {
