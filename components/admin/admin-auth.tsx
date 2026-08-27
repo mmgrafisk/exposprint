@@ -55,6 +55,16 @@ function AdminAuthForm({ bootstrap, initialPhase, authConfig }: {
     setPhase("enroll");
   }
 
+  async function preparePasswordResetMfa() {
+    const supabase = browserSupabase(authConfig);
+    if (!supabase) return setMessage(String(t("admin.recoveryError")));
+    const { data: factors, error } = await supabase.auth.mfa.listFactors();
+    if (error) return setMessage(String(t("admin.mfaError")));
+    const verified = factors.totp.find((factor) => factor.status === "verified");
+    if (!verified) return setMessage(String(t("admin.mfaError")));
+    setFactorId(verified.id);
+  }
+
   useEffect(() => {
     if (initialPhase !== "mfa" && initialPhase !== "reset") return;
     const handle = window.setTimeout(() => {
@@ -65,16 +75,6 @@ function AdminAuthForm({ bootstrap, initialPhase, authConfig }: {
   // The initial phase is immutable for the lifetime of this screen.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function preparePasswordResetMfa() {
-    const supabase = browserSupabase(authConfig);
-    if (!supabase) return setMessage(String(t("admin.recoveryError")));
-    const { data: factors, error } = await supabase.auth.mfa.listFactors();
-    if (error) return setMessage(String(t("admin.mfaError")));
-    const verified = factors.totp.find((factor) => factor.status === "verified");
-    if (!verified) return setMessage(String(t("admin.mfaError")));
-    setFactorId(verified.id);
-  }
 
   async function signIn(event: React.FormEvent) {
     event.preventDefault();
