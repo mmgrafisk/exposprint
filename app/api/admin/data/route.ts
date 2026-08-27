@@ -93,7 +93,7 @@ export async function GET() {
   const db = await serverSupabase();
   if (!db) return NextResponse.json({ error: "ADMIN_DATABASE_NOT_CONFIGURED" }, { status: 503 });
   const results = await Promise.all([
-    db.from("products").select("id,sku,status,category_slug,supplier_cost_minor,net_price_minor_dkk,production_days_min,production_days_max,approved_image_path").order("sku"),
+    db.rpc("admin_product_rows"),
     db.from("translation_entries").select("locale,namespace,key,value,status,updated_at").order("locale").order("namespace").order("key"),
     db.from("required_translation_keys").select("namespace,key,area"),
     db.from("locales").select("*").order("sort_order"),
@@ -129,7 +129,7 @@ export async function PATCH(request: Request) {
   let after: unknown = null;
 
   if (resource === "product") {
-    const previous = await db.from("products").select("*").eq("id", id).single(); before = previous.data;
+    const previous = await db.rpc("admin_product_rows", { target_product_id: id }).maybeSingle(); before = previous.data;
     const update = {
       ...(values.supplierCostMinor !== undefined ? { supplier_cost_minor: values.supplierCostMinor } : {}),
       ...(values.productionDaysMin !== undefined ? { production_days_min: values.productionDaysMin } : {}),
@@ -137,7 +137,12 @@ export async function PATCH(request: Request) {
       ...(values.status !== undefined ? { status: values.status } : {}),
       updated_at: new Date().toISOString(),
     };
-    const result = await db.from("products").update(update).eq("id", id).select().single(); error = result.error; after = result.data;
+    const result = await db.from("products").update(update).eq("id", id); error = result.error;
+    if (!error) {
+      const current = await db.rpc("admin_product_rows", { target_product_id: id }).maybeSingle();
+      error = current.error;
+      after = current.data;
+    }
   } else if (resource === "translation") {
     const [locale, namespace, ...keyParts] = id.split(":");
     const key = keyParts.join(":");

@@ -102,6 +102,19 @@ test("admin auth receives public Supabase runtime config from the server", async
   assert.doesNotMatch(consoleSource, /process\.env\.NEXT_PUBLIC_SUPABASE/);
 });
 
+test("admin product costs use a guarded database function", async () => {
+  const [route, sql] = await Promise.all([
+    read("app/api/admin/data/route.ts"),
+    read("supabase/migrations/20260827043000_admin_product_access.sql"),
+  ]);
+  assert.match(route, /db\.rpc\("admin_product_rows"\)/);
+  assert.doesNotMatch(route, /from\("products"\)\.select\("\*"\)/);
+  assert.match(sql, /security definer/);
+  assert.match(sql, /where public\.is_admin\(\)/);
+  assert.match(sql, /revoke all on function public\.admin_product_rows\(uuid\) from public, anon/);
+  assert.match(sql, /grant execute on function public\.admin_product_rows\(uuid\) to authenticated/);
+});
+
 test("admin recovery stays same-origin and closed setup has no signup side effect", async () => {
   const [callback, setupPage, setupApi] = await Promise.all([
     read("app/auth/callback/route.ts"),
